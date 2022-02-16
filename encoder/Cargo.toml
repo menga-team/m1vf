@@ -1,0 +1,11 @@
+[package]
+name = "m1enc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "3.0.10", features = ["derive"] }
+byteorder = "1.4.3"
+image = "0.23.14"
+anyhow = "1"
+colored = "2.0.0"
