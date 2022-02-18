@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
     fs::{self, DirEntry, File},
     hash::Hash,
-    io::{stdout, ErrorKind, Write, stderr},
+    io::{stderr, stdout, ErrorKind, Write},
     path::PathBuf,
     process::Command,
     vec,
@@ -28,6 +28,8 @@ struct Args {
     width: u16,
     #[clap(short, long)]
     height: u16,
+    #[clap(short, long)]
+    parity: bool,
 }
 type ENDIANESS = BE;
 const THREASHHOLD: u8 = 127;
@@ -120,7 +122,13 @@ fn main() -> anyhow::Result<()> {
         PathBuf::from("frames")
     })?;
     let contents: Vec<DirEntry> = contents.map(|entry| entry.unwrap()).collect();
-    let mut output = File::create(args.output)?;
+    let mut output = File::create(&args.output)?;
+    let mut parity = None;
+    if args.parity {
+        let mut parity_path = args.output.clone();
+        parity_path.set_extension("parity");
+        parity = Some(File::create(parity_path)?);
+    }
     let mut last_pixels = vec![0u8; (args.width as usize * args.height as usize) as usize];
     // used for statistics for how many times a certian algorithm is used
     let mut statistics: HashMap<Algorithm, u32> = HashMap::new();
@@ -139,8 +147,14 @@ fn main() -> anyhow::Result<()> {
             .into_iter()
             .map(|p| if p.0[0] > THREASHHOLD { 1 } else { 0 })
             .collect();
+        // create parity file, where every byte is either 1 or 0, and it encodes every pixel from every frame.
+        // the file is used to check if the decoder and encoder read the same results and to easier identify bugs.
+        // To enable the generation of the parity file pass the `--parity (-p)` argument to the encoder.
+        if let Some(parity) = &mut parity {
+            parity.write_all(&pixels)?;
+        }
         let mut algos: Vec<(Algorithm, Vec<u8>)> = Vec::with_capacity(ALGORITHMS.len());
-        //eprintln!("FRAME {}", progress);
+        eprintln!(" ======================== FRAME {}", progress);
         for algo in ALGORITHMS {
             let encoded = algo.encode(&pixels, &last_pixels);
             if encoded.is_ok() {
@@ -178,7 +192,8 @@ fn main() -> anyhow::Result<()> {
         //     "{:6}: {:?} (CURRENT: {:?}) ({})",
         //     compressed_frame_index, last_algorithm, compressed_frame.0, algorithm_count
         // );
-        if algorithm_count == 31 { // new spec
+        if algorithm_count == 31 {
+            // new spec
             // println!("write");
             output.write_all(&encode_algos(
                 &compressed_frames,
@@ -225,12 +240,12 @@ fn encode_algos(
 ) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
     buf.write_u8(((last_algorithm as u8) << 5) | (algorithm_count))?; // new spec
-    // println!(
-    //     "{:08b}: {}..={}",
-    //     (((last_algorithm as u8) << 4) | (algorithm_count)),
-    //     (compressed_frame_index - (algorithm_count) as usize),
-    //     compressed_frame_index
-    // );
+                                                                      // println!(
+                                                                      //     "{:08b}: {}..={}",
+                                                                      //     (((last_algorithm as u8) << 4) | (algorithm_count)),
+                                                                      //     (compressed_frame_index - (algorithm_count) as usize),
+                                                                      //     compressed_frame_index
+                                                                      // );
     for i in (compressed_frame_index - (algorithm_count) as usize)..=compressed_frame_index {
         let (_, frame) = &compressed_frames[i];
         buf.write_all(&frame)?;
@@ -260,19 +275,19 @@ fn run_length_rows(pixels: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     let mut color: Option<u8> = None;
     let mut repeat: u8 = 0;
     fn encode_byte(color: u8, repeat: u8) -> u8 {
-        //eprintln!("{:08b}, rep: {}", color << 7, repeat);
+        eprintln!("{:08b}, rep: {}", (color << 7) | repeat, repeat);
         (color << 7) | repeat
     }
     for pixel in pixels {
         //let pixel = &pixels[pixel_index];
-        //eprintln!("{}", pixel);
+        eprintln!("{}", pixel);
         if color.is_none() {
             repeat = 0;
             color = Some(*pixel);
         } else if *pixel == color.unwrap() {
             repeat += 1;
         }
-        //eprintln!("C: {} - {}", color.unwrap(), repeat);
+        eprintln!("C: {} - {}", color.unwrap(), repeat);
         if *pixel != color.unwrap() || repeat == 0b0111_1111 {
             buf.write_u8(encode_byte(color.unwrap(), repeat))?;
             repeat = 0;
