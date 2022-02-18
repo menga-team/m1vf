@@ -32,8 +32,7 @@ int main(int argc, char *argv[])
     {
         if (argv[i][0] == '-')
         {
-            int j = 0;
-            while (argv[i][j] == 'v' && argv[i][j] != 0x00)
+            while (argv[i][debug] == 'v' && argv[i][debug] != 0x00)
             {
                 debug++;
             }
@@ -52,12 +51,17 @@ int main(int argc, char *argv[])
     file.open(filename, ios_base::binary);
     if (!file.is_open())
         return 0;
+    std::vector<byte> paritybuf;
     if (!parityfile.empty())
     {
         std::ifstream parity;
-        file.open(parityfile, ios_base::binary);
+        parity.open(parityfile, ios_base::binary);
         if (!parity.is_open())
             return 0;
+        size_t fileSizeParity = parity.tellg();
+        paritybuf.resize(fileSizeParity, 0);
+        parity.seekg(0, ios::beg);
+        parity.read(reinterpret_cast<char *>(&paritybuf), fileSizeParity);
     }
     file.seekg(0, ios::end);
     size_t fileSize = file.tellg();
@@ -97,6 +101,7 @@ int main(int argc, char *argv[])
 
         line = somevideo.width;
         pixels = somevideo.framesize;
+        int parityPixel = 0;
         for (int i = 0; i < somevideo.buffersize; i++)
         {
             byte x = frame[i];
@@ -105,12 +110,23 @@ int main(int argc, char *argv[])
                 byte bit = x & 0x80;
                 if (bit == 128)
                 {
+                    if (!paritybuf.empty() && paritybuf[parityPixel] != 1)
+                    {
+                        cout << framecount;
+                        return -1;
+                    }
                     cout << "██";
                 }
                 else
                 {
+                    if (!paritybuf.empty() && paritybuf[parityPixel] != 0)
+                    {
+                        cout << framecount;
+                        return -1;
+                    }
                     cout << "  ";
                 }
+                parityPixel++;
                 x <<= 1;
                 line--;
                 if (line == 0)
