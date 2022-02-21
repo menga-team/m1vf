@@ -51,17 +51,18 @@ int main(int argc, char *argv[])
     file.open(filename, ios_base::binary);
     if (!file.is_open())
         return 0;
-    std::vector<byte> paritybuf;
+    std::vector<char> paritybuf;
     if (!parityfile.empty())
     {
         std::ifstream parity;
         parity.open(parityfile, ios_base::binary);
+        file.seekg(0, std::ios_base::end);
         if (!parity.is_open())
             return 0;
-        size_t fileSizeParity = parity.tellg();
+        std::streampos fileSizeParity = file.tellg();
         paritybuf.resize(fileSizeParity, 0);
         parity.seekg(0, ios::beg);
-        parity.read(reinterpret_cast<char *>(&paritybuf), fileSizeParity);
+        parity.read(&paritybuf[0], fileSizeParity);
     }
     file.seekg(0, ios::end);
     size_t fileSize = file.tellg();
@@ -78,7 +79,7 @@ int main(int argc, char *argv[])
     int line;
     int pixels;
     bool run = true;
-    byte *frame = (byte *)malloc(somevideo.buffersize);
+    byte *frame = (byte *)calloc(0, somevideo.buffersize);
 
     long long time;
 
