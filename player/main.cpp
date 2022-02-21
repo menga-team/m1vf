@@ -20,8 +20,8 @@ void notify_parity_mismatch(byte parity, byte read, unsigned int frame)
 {
     cout << "Decoded value does not match with parity file. (Frame " << frame << ")" << endl
          << "Read " << read << ", but should be " << parity << endl
-         << "00 = Should be black, but is white." << endl
-         << "11 = Should be white, but is black.";
+         << "0  = Should be black, but is white." << endl
+         << "1  = Should be white, but is black.";
 }
 
 int main(int argc, char *argv[])
@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
                 {
                     if (!paritybuf.empty() && paritybuf[parity_pixel] != 1)
                     {
-                        cout << "00";
+                        cout << "\x1B[41m" << "0 " << "\e[0m";
                         if (stop_on_mismatch)
                         {
                             run = false;
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
                 {
                     if (!paritybuf.empty() && paritybuf[parity_pixel] != 0)
                     {
-                        cout << "11";
+                        cout << "\x1B[42m" << "1 " << "\e[0m";
                         if (stop_on_mismatch)
                         {
                             run = false;
