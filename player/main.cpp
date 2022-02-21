@@ -16,15 +16,24 @@ long long timestamp_ms()
     return milliseconds;
 }
 
+void notify_parity_mismatch(byte parity, byte read, unsigned int frame)
+{
+    cout << "Decoded value does not match with parity file. (Frame " << frame << ")" << endl
+         << "Read " << read << ", but should be " << parity << endl
+         << "00 = Should be black, but is white." << endl
+         << "11 = Should be white, but is black.";
+}
+
 int main(int argc, char *argv[])
 {
     byte debug = 0;
     string filename;
     string parityfile;
+    bool stop_on_mismatch = false;
 
     if (argc < 2)
     {
-        cout << "Syntax Error: m1play filename [parityfile]" << endl;
+        cout << "Syntax Error: m1play [-vvv] [--stop-on-mismatch] filename [parityfile]" << endl;
         return 1;
     }
 
@@ -32,9 +41,16 @@ int main(int argc, char *argv[])
     {
         if (argv[i][0] == '-')
         {
-            while (argv[i][debug] == 'v' && argv[i][debug] != 0x00)
+            if (argv[i][1] == 'v')
             {
-                debug++;
+                while (argv[i][debug] == 'v' && argv[i][debug] != 0x00)
+                {
+                    debug++;
+                }
+            }
+            else if (strcmp(argv[i], "--stop-on-mismatch") == 0)
+            {
+                stop_on_mismatch = true;
             }
         }
         else if (!filename.empty())
@@ -47,22 +63,29 @@ int main(int argc, char *argv[])
         }
     }
 
+    if (stop_on_mismatch && parityfile.empty())
+    {
+        cout << "Can not stop on mismatch when no parity file is given." << endl;
+        return -1;
+    }
+
     std::ifstream file;
     file.open(filename, ios_base::binary);
     if (!file.is_open())
         return 0;
-    std::vector<char> paritybuf;
+    std::vector<byte> paritybuf;
     if (!parityfile.empty())
     {
         std::ifstream parity;
         parity.open(parityfile, ios_base::binary);
-        file.seekg(0, std::ios_base::end);
         if (!parity.is_open())
             return 0;
-        std::streampos fileSizeParity = file.tellg();
-        paritybuf.resize(fileSizeParity, 0);
+        parity.seekg(0, std::ios_base::end);
+        size_t fileSizeParity = parity.tellg();
         parity.seekg(0, ios::beg);
-        parity.read(&paritybuf[0], fileSizeParity);
+        paritybuf.resize(fileSizeParity, 1);
+        parity.read(reinterpret_cast<char *>(&paritybuf[0]), fileSizeParity);
+        parity.close();
     }
     file.seekg(0, ios::end);
     size_t fileSize = file.tellg();
@@ -79,7 +102,7 @@ int main(int argc, char *argv[])
     int line;
     int pixels;
     bool run = true;
-    byte *frame = (byte *)calloc(0, somevideo.buffersize);
+    byte *frame = (byte *)malloc(somevideo.buffersize);
 
     long long time;
 
@@ -93,7 +116,7 @@ int main(int argc, char *argv[])
         }
         return 0;
     }
-
+    int parity_pixel = 0;
     for (int framecount = 0; run; framecount++)
     {
         time = timestamp_ms();
@@ -102,7 +125,6 @@ int main(int argc, char *argv[])
 
         line = somevideo.width;
         pixels = somevideo.framesize;
-        int parityPixel = 0;
         for (int i = 0; i < somevideo.buffersize; i++)
         {
             byte x = frame[i];
@@ -111,23 +133,31 @@ int main(int argc, char *argv[])
                 byte bit = x & 0x80;
                 if (bit == 128)
                 {
-                    if (!paritybuf.empty() && paritybuf[parityPixel] != 1)
+                    if (!paritybuf.empty() && paritybuf[parity_pixel] != 1)
                     {
-                        cout << framecount;
-                        return -1;
+                        cout << "00";
+                        if (stop_on_mismatch)
+                        {
+                            run = false;
+                        }
                     }
-                    cout << "██";
+                    else
+                        cout << "██";
                 }
                 else
                 {
-                    if (!paritybuf.empty() && paritybuf[parityPixel] != 0)
+                    if (!paritybuf.empty() && paritybuf[parity_pixel] != 0)
                     {
-                        cout << framecount;
-                        return -1;
+                        cout << "11";
+                        if (stop_on_mismatch)
+                        {
+                            run = false;
+                        }
                     }
-                    cout << "  ";
+                    else
+                        cout << "  ";
                 }
-                parityPixel++;
+                parity_pixel++;
                 x <<= 1;
                 line--;
                 if (line == 0)
@@ -146,7 +176,10 @@ int main(int argc, char *argv[])
             cout << "==";
         }
         cout << endl;
-        cout << "Frame " << framecount << endl;
+        cout << "Frame " << framecount << " ";
+        if (!paritybuf.empty())
+            cout << "Parity index " << parity_pixel;
+        cout << endl;
 
         usleep((unsigned int)((1000.0 / somevideo.framerate - (float)(timestamp_ms() - time))) * 1000);
     }
