@@ -10,13 +10,20 @@ USAGE:
     m1enc [OPTIONS] --input <INPUT> --output <OUTPUT> --width <WIDTH> --height <HEIGHT>
 
 OPTIONS:
-    -h, --height <HEIGHT>          
+    -h, --height <HEIGHT>          Height of the output video
         --help                     Print help information
-    -i, --input <INPUT>            
-    -o, --output <OUTPUT>          
-    -r, --framerate <FRAMERATE>    [default: 30]
+    -i, --input <INPUT>            The source, can be either a folder with frames, or a video which
+                                   will get processed to a folder with frames by ffmpeg.
+    -o, --output <OUTPUT>          The output file, the same path, but with a different file
+                                   extension will be used for files like parity check.
+    -p, --parity                   Generates a parity file along with the m1vf file. Will use the
+                                   file specified in --output, but with an different file extension.
+    -r, --framerate <FRAMERATE>    The encoded framerate [default: 30]
+    -t, --text                     Generates a text file, similar to an flipbook (which can come in
+                                   handy when debugging), along with the m1vf file. Will use the
+                                   file specified in --output, but with an different file extension.
     -V, --version                  Print version information
-    -w, --width <WIDTH>            
+    -w, --width <WIDTH>            Width of the output video      
 ```
 
 ## Example

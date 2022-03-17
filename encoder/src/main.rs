@@ -18,19 +18,40 @@ use colored::Colorize;
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
-    #[clap(short, long)]
+    #[clap(
+        short,
+        long,
+        help = "The source, can be either a folder with frames, or a video which will get processed to a folder with frames by ffmpeg."
+    )]
     input: PathBuf,
-    #[clap(short, long)]
+    #[clap(
+        short,
+        long,
+        help = "The output file, the same path, but with a different file extension will be used for files like parity check."
+    )]
     output: PathBuf,
-    #[clap(short = 'r', long, default_value_t = 30)]
+    #[clap(
+        short = 'r',
+        long,
+        default_value_t = 30,
+        help = "The encoded framerate"
+    )]
     framerate: u8,
-    #[clap(short, long)]
+    #[clap(short, long, help = "Width of the output video")]
     width: u16,
-    #[clap(short, long)]
+    #[clap(short, long, help = "Height of the output video")]
     height: u16,
-    #[clap(short, long)]
+    #[clap(
+        short,
+        long,
+        help = "Generates a parity file along with the m1vf file. Will use the file specified in --output, but with an different file extension."
+    )]
     parity: bool,
-    #[clap(short, long)]
+    #[clap(
+        short,
+        long,
+        help = "Generates a text file, similar to an flipbook (which can come in handy when debugging), along with the m1vf file. Will use the file specified in --output, but with an different file extension."
+    )]
     text: bool,
 }
 type ENDIANESS = BE;
@@ -163,7 +184,11 @@ fn main() -> anyhow::Result<()> {
         }
         // Render the animation to text
         if let Some(text) = &mut text {
-            write!(text, "\n Frame {} - {}x{}", progress, args.width, args.height)?;
+            write!(
+                text,
+                "\n Frame {} - {}x{}",
+                progress, args.width, args.height
+            )?;
             for (i, pixel) in pixels.iter().enumerate() {
                 if i % args.width as usize == 0 {
                     writeln!(text, "")?;
@@ -258,12 +283,12 @@ fn encode_algos(
 ) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
     buf.push(((last_algorithm as u8) << 5) | (algorithm_count)); // new spec
-                                                                      // println!(
-                                                                      //     "{:08b}: {}..={}",
-                                                                      //     (((last_algorithm as u8) << 4) | (algorithm_count)),
-                                                                      //     (compressed_frame_index - (algorithm_count) as usize),
-                                                                      //     compressed_frame_index
-                                                                      // );
+                                                                 // println!(
+                                                                 //     "{:08b}: {}..={}",
+                                                                 //     (((last_algorithm as u8) << 4) | (algorithm_count)),
+                                                                 //     (compressed_frame_index - (algorithm_count) as usize),
+                                                                 //     compressed_frame_index
+                                                                 // );
     for i in (compressed_frame_index - (algorithm_count) as usize)..=compressed_frame_index {
         let (_, frame) = &compressed_frames[i];
         buf.write_all(&frame)?;
@@ -307,8 +332,8 @@ fn run_length_rows(pixels: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
             buf.push(encode_byte(color.unwrap(), repeat));
             repeat = 0;
             color = Some(*pixel);
-        }
-        else if repeat == 0b0111_1111 { //this bug took multiple months...
+        } else if repeat == 0b0111_1111 {
+            //this bug took multiple months...
             buf.push(encode_byte(color.unwrap(), repeat));
             repeat = 0;
             color = None;
