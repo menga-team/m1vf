@@ -24,16 +24,20 @@ void notify_parity_mismatch(byte parity, byte read, unsigned int frame)
          << "1  = Should be white, but is black.";
 }
 
-int main(int argc, char *argv[])
-{
+struct Args {
     byte debug = 0;
     string filename;
     string parityfile;
     bool stop_on_mismatch = false;
+    bool skip_time = false;
+};
 
+int main(int argc, char *argv[])
+{
+    struct Args args;
     if (argc < 2)
     {
-        cout << "Syntax Error: m1play [-vvv] [--stop-on-mismatch] filename [parityfile]" << endl;
+        cout << "Syntax Error: m1play [-vvv] [--stop-on-mismatch] [--skip-time] filename [parityfile]" << endl;
         return 1;
     }
 
@@ -43,41 +47,45 @@ int main(int argc, char *argv[])
         {
             if (argv[i][1] == 'v')
             {
-                while (argv[i][debug] == 'v' && argv[i][debug] != 0x00)
+                while (argv[i][args.debug] == 'v' && argv[i][args.debug] != 0x00)
                 {
-                    debug++;
+                    args.debug++;
                 }
             }
             else if (strcmp(argv[i], "--stop-on-mismatch") == 0)
             {
-                stop_on_mismatch = true;
+                args.stop_on_mismatch = true;
+            }
+            else if (strcmp(argv[i], "--skip-time") == 0)
+            {
+                args.skip_time = true;
             }
         }
-        else if (!filename.empty())
+        else if (!args.filename.empty())
         {
-            parityfile = argv[i];
+            args.parityfile = argv[i];
         }
         else
         {
-            filename = argv[i];
+            args.filename = argv[i];
         }
     }
 
-    if (stop_on_mismatch && parityfile.empty())
+    if (args.stop_on_mismatch && args.parityfile.empty())
     {
         cout << "Can not stop on mismatch when no parity file is given." << endl;
         return -1;
     }
 
     std::ifstream file;
-    file.open(filename, ios_base::binary);
+    file.open(args.filename, ios_base::binary);
     if (!file.is_open())
         return 0;
     std::vector<byte> paritybuf;
-    if (!parityfile.empty())
+    if (!args.parityfile.empty())
     {
         std::ifstream parity;
-        parity.open(parityfile, ios_base::binary);
+        parity.open(args.parityfile, ios_base::binary);
         if (!parity.is_open())
             return 0;
         parity.seekg(0, std::ios_base::end);
@@ -97,7 +105,7 @@ int main(int argc, char *argv[])
     byte *bytes = &data[0];
     int size = data.size();
 
-    M1VF somevideo(bytes, size, debug);
+    M1VF somevideo(bytes, size, args.debug);
 
     int line;
     int pixels;
@@ -106,7 +114,7 @@ int main(int argc, char *argv[])
 
     long long time;
 
-    if (debug > 0)
+    if (args.debug > 0)
     {
         while (run)
         {
@@ -120,7 +128,8 @@ int main(int argc, char *argv[])
     for (int framecount = 0; run; framecount++)
     {
         time = timestamp_ms();
-        system("clear");
+        // todo: pls no clear
+        //system("clear");
         run = somevideo.next_frame(frame);
 
         line = somevideo.width;
@@ -136,7 +145,7 @@ int main(int argc, char *argv[])
                     if (!paritybuf.empty() && paritybuf[parity_pixel] != 1)
                     {
                         cout << "\x1B[41m" << "0 " << "\e[0m";
-                        if (stop_on_mismatch)
+                        if (args.stop_on_mismatch)
                         {
                             run = false;
                         }
@@ -149,7 +158,7 @@ int main(int argc, char *argv[])
                     if (!paritybuf.empty() && paritybuf[parity_pixel] != 0)
                     {
                         cout << "\x1B[42m" << "1 " << "\e[0m";
-                        if (stop_on_mismatch)
+                        if (args.stop_on_mismatch)
                         {
                             run = false;
                         }
@@ -180,7 +189,7 @@ int main(int argc, char *argv[])
         if (!paritybuf.empty())
             cout << "Parity index " << parity_pixel;
         cout << endl;
-
-        usleep((unsigned int)((1000.0 / somevideo.framerate - (float)(timestamp_ms() - time))) * 1000);
+        if(!args.skip_time)
+            usleep((unsigned int)((1000.0 / somevideo.framerate - (float)(timestamp_ms() - time))) * 1000);
     }
 }

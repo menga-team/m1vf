@@ -30,6 +30,8 @@ struct Args {
     height: u16,
     #[clap(short, long)]
     parity: bool,
+    #[clap(short, long)]
+    text: bool,
 }
 type ENDIANESS = BE;
 const THREASHHOLD: u8 = 127;
@@ -129,6 +131,12 @@ fn main() -> anyhow::Result<()> {
         parity_path.set_extension("parity");
         parity = Some(File::create(parity_path)?);
     }
+    let mut text = None;
+    if args.text {
+        let mut text_path = args.output.clone();
+        text_path.set_extension("frames.txt");
+        text = Some(File::create(text_path)?);
+    }
     let mut last_pixels = vec![0u8; (args.width as usize * args.height as usize) as usize];
     // used for statistics for how many times a certian algorithm is used
     let mut statistics: HashMap<Algorithm, u32> = HashMap::new();
@@ -153,8 +161,18 @@ fn main() -> anyhow::Result<()> {
         if let Some(parity) = &mut parity {
             parity.write_all(&pixels)?;
         }
+        // Render the animation to text
+        if let Some(text) = &mut text {
+            write!(text, "\n Frame {} - {}x{}", progress, args.width, args.height)?;
+            for (i, pixel) in pixels.iter().enumerate() {
+                if i % args.width as usize == 0 {
+                    writeln!(text, "")?;
+                }
+                write!(text, "{}", if *pixel == 1 { "██" } else { "  " })?;
+            }
+            writeln!(text, "")?;
+        }
         let mut algos: Vec<(Algorithm, Vec<u8>)> = Vec::with_capacity(ALGORITHMS.len());
-        eprintln!(" ======================== FRAME {}", progress);
         for algo in ALGORITHMS {
             let encoded = algo.encode(&pixels, &last_pixels);
             if encoded.is_ok() {
@@ -239,7 +257,7 @@ fn encode_algos(
     last_algorithm: Algorithm,
 ) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
-    buf.write_u8(((last_algorithm as u8) << 5) | (algorithm_count))?; // new spec
+    buf.push(((last_algorithm as u8) << 5) | (algorithm_count)); // new spec
                                                                       // println!(
                                                                       //     "{:08b}: {}..={}",
                                                                       //     (((last_algorithm as u8) << 4) | (algorithm_count)),
@@ -275,27 +293,29 @@ fn run_length_rows(pixels: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     let mut color: Option<u8> = None;
     let mut repeat: u8 = 0;
     fn encode_byte(color: u8, repeat: u8) -> u8 {
-        eprintln!("{:08b}, rep: {}", (color << 7) | repeat, repeat);
         (color << 7) | repeat
     }
     for pixel in pixels {
         //let pixel = &pixels[pixel_index];
-        eprintln!("{}", pixel);
         if color.is_none() {
             repeat = 0;
             color = Some(*pixel);
         } else if *pixel == color.unwrap() {
             repeat += 1;
         }
-        eprintln!("C: {} - {}", color.unwrap(), repeat);
-        if *pixel != color.unwrap() || repeat == 0b0111_1111 {
-            buf.write_u8(encode_byte(color.unwrap(), repeat))?;
+        if *pixel != color.unwrap() {
+            buf.push(encode_byte(color.unwrap(), repeat));
             repeat = 0;
             color = Some(*pixel);
         }
+        else if repeat == 0b0111_1111 { //this bug took multiple months...
+            buf.push(encode_byte(color.unwrap(), repeat));
+            repeat = 0;
+            color = None;
+        }
     }
     if color.is_some() {
-        buf.write_u8(encode_byte(color.unwrap(), repeat))?;
+        buf.push(encode_byte(color.unwrap(), repeat));
     }
     Ok(buf)
 }
