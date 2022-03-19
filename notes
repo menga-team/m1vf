@@ -20,6 +20,8 @@ down, right:
 for i in range(20):
 	for j in range(16):
 		print(j * 20 + i)
+
+i = (int(x%16)) * 20 + (int(x / 16))
 		
 down, left:
 

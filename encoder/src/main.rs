@@ -68,17 +68,18 @@ enum Algorithm {
     PartialColumnsUncompressed = 0x5,
 }
 
-const ALGORITHMS: [Algorithm; 3] = [
+const ALGORITHMS: [Algorithm; 4] = [
     Algorithm::Uncompressed,
     Algorithm::Same,
     Algorithm::RunLengthRows,
+    Algorithm::RunLengthColumns,
 ];
 
 impl Algorithm {
-    pub fn encode(&self, current_frame: &Vec<u8>, last_frame: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
+    pub fn encode(&self, current_frame: &Vec<u8>, last_frame: &Vec<u8>, video_width: u16, video_height: u16) -> anyhow::Result<Vec<u8>> {
         match self {
             Algorithm::Uncompressed => uncompressed(&current_frame),
-            &Algorithm::Same => {
+            Algorithm::Same => {
                 let mut same = true;
                 for i in 0..current_frame.len() {
                     if current_frame[i] != last_frame[i] {
@@ -92,7 +93,8 @@ impl Algorithm {
                     Err(anyhow!("Not the same"))
                 }
             }
-            &Algorithm::RunLengthRows => run_length_rows(current_frame),
+            Algorithm::RunLengthRows => run_length_rows(current_frame),
+            Algorithm::RunLengthColumns => run_length_columns(current_frame, video_width, video_height),
             _ => {
                 unreachable!()
             }
@@ -199,7 +201,7 @@ fn main() -> anyhow::Result<()> {
         }
         let mut algos: Vec<(Algorithm, Vec<u8>)> = Vec::with_capacity(ALGORITHMS.len());
         for algo in ALGORITHMS {
-            let encoded = algo.encode(&pixels, &last_pixels);
+            let encoded = algo.encode(&pixels, &last_pixels, args.width, args.height);
             if encoded.is_ok() {
                 algos.push((algo, encoded?));
             }
@@ -313,15 +315,15 @@ fn uncompressed(pixels: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     Ok(buf)
 }
 
+fn encode_rl_byte(color: u8, repeat: u8) -> u8 {
+    (color << 7) | repeat
+}
+
 fn run_length_rows(pixels: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
     let mut buf = Vec::new();
     let mut color: Option<u8> = None;
     let mut repeat: u8 = 0;
-    fn encode_byte(color: u8, repeat: u8) -> u8 {
-        (color << 7) | repeat
-    }
     for pixel in pixels {
-        //let pixel = &pixels[pixel_index];
         if color.is_none() {
             repeat = 0;
             color = Some(*pixel);
@@ -329,18 +331,47 @@ fn run_length_rows(pixels: &Vec<u8>) -> anyhow::Result<Vec<u8>> {
             repeat += 1;
         }
         if *pixel != color.unwrap() {
-            buf.push(encode_byte(color.unwrap(), repeat));
+            buf.push(encode_rl_byte(color.unwrap(), repeat));
             repeat = 0;
             color = Some(*pixel);
         } else if repeat == 0b0111_1111 {
-            //this bug took multiple months...
-            buf.push(encode_byte(color.unwrap(), repeat));
+            buf.push(encode_rl_byte(color.unwrap(), repeat));
             repeat = 0;
             color = None;
         }
     }
     if color.is_some() {
-        buf.push(encode_byte(color.unwrap(), repeat));
+        buf.push(encode_rl_byte(color.unwrap(), repeat));
+    }
+    Ok(buf)
+}
+
+fn run_length_columns(pixels: &Vec<u8>, video_width: u16, video_height: u16) -> anyhow::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let mut color: Option<u8> = None;
+    let mut repeat: u8 = 0;
+    for i in 0..video_width {
+        for j in 0..video_height {
+            let pixel = &pixels[j as usize * 20 + i as usize];
+            if color.is_none() {
+                repeat = 0;
+                color = Some(*pixel);
+            } else if *pixel == color.unwrap() {
+                repeat += 1;
+            }
+            if *pixel != color.unwrap() {
+                buf.push(encode_rl_byte(color.unwrap(), repeat));
+                repeat = 0;
+                color = Some(*pixel);
+            } else if repeat == 0b0111_1111 {
+                buf.push(encode_rl_byte(color.unwrap(), repeat));
+                repeat = 0;
+                color = None;
+            }
+        }
+    }
+    if color.is_some() {
+        buf.push(encode_rl_byte(color.unwrap(), repeat));
     }
     Ok(buf)
 }

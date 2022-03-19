@@ -92,32 +92,20 @@ private:
 
     void decode_run_length_column()
     {
-        msg2("rlc> start");
-        int column_index = 0;
-        int row_index = 0;
-
-        while (column_index + 1 != width && row_index + 1 != height)
+        int totalbits = 0;
+        while (totalbits < framesize)
         {
             // read from data
             bool color = _data[_index] & 0b10000000;
             byte repeatbits = (_data[_index] & 0b01111111) + 1;
             _index++;
-            msg2("rlc> color: " << color << "   repeatbits: " << int(repeatbits));
-
-            // write to buffer
-            for (int i = 0; i < repeatbits; i++)
+            for (int i = totalbits; i < totalbits + repeatbits; i++)
             {
-                if (row_index >= height)
-                {
-                    row_index = 0;
-                    column_index++;
-                }
-                msg2("rlc> writer iteration start: " << i << "   column_index: " << int(column_index) << "   row_index: " << int(row_index));
-                set_column_row(column_index, row_index, color);
-                row_index++;
+                int index = (i % height) * width + (i / height);
+                set_byte_bit(index / 8, index % 8, color);
             }
+            totalbits += repeatbits;
         }
-        msg2("rlc> finish");
     }
 
     void decode_changed_rows_uncompressed() {}
